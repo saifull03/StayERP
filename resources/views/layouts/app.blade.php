@@ -23,35 +23,56 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="h-full antialiased text-slate-800" x-data="{ sidebarOpen: false, userDropdown: false }">
+<body class="h-full antialiased text-slate-800" x-data="{ 
+    sidebarOpen: localStorage.getItem('stayinghotel_sidebar_open') !== 'false', 
+    mobileSidebarOpen: false, 
+    userDropdown: false,
+    toggleSidebar() {
+        if (window.innerWidth < 1024) {
+            this.mobileSidebarOpen = !this.mobileSidebarOpen;
+        } else {
+            this.sidebarOpen = !this.sidebarOpen;
+            localStorage.setItem('stayinghotel_sidebar_open', this.sidebarOpen);
+        }
+    }
+}">
     <div class="min-h-full flex flex-col lg:flex-row">
 
         <!-- Mobile Sidebar Overlay -->
-        <div x-show="sidebarOpen" 
+        <div x-show="mobileSidebarOpen" 
              x-cloak 
-             @click="sidebarOpen = false" 
+             @click="mobileSidebarOpen = false" 
              class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden transition-opacity">
         </div>
 
-        <!-- Sidebar -->
-        <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" 
-               class="fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-slate-200 transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col shrink-0 border-r border-slate-800">
+        <!-- Sliding Sidebar -->
+        <aside :class="{
+                   'translate-x-0': mobileSidebarOpen,
+                   '-translate-x-full': !mobileSidebarOpen,
+                   'lg:translate-x-0 lg:w-72 lg:opacity-100': sidebarOpen,
+                   'lg:-translate-x-full lg:w-0 lg:border-transparent lg:opacity-0': !sidebarOpen
+               }" 
+               class="fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-slate-200 transition-all duration-300 ease-in-out lg:static lg:inset-0 flex flex-col shrink-0 border-r border-slate-800 overflow-hidden">
             
-            <!-- Branding Header -->
-            <div class="h-18 flex items-center justify-between px-6 border-b border-slate-800/80 bg-slate-950/40">
-                <a href="{{ route('dashboard') }}" class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30">
-                        <i data-lucide="hotel" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <span class="text-lg font-extrabold tracking-tight text-white block leading-tight font-heading">StayingHotel</span>
-                        <span class="text-[11px] font-semibold text-emerald-400 tracking-wider uppercase block">ERP Business Core</span>
-                    </div>
-                </a>
-                <button @click="sidebarOpen = false" class="lg:hidden text-slate-400 hover:text-white p-1 rounded-md">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
+            <div class="w-72 flex flex-col h-full shrink-0">
+                <!-- Branding Header with Slide Toggle -->
+                <div class="h-18 flex items-center justify-between px-5 border-b border-slate-800/80 bg-slate-950/40 shrink-0">
+                    <a href="{{ route('dashboard') }}" class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-900/30 shrink-0">
+                            <i data-lucide="hotel" class="w-5 h-5"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <span class="text-lg font-extrabold tracking-tight text-white block leading-tight font-heading truncate">StayingHotel</span>
+                            <span class="text-[11px] font-semibold text-emerald-400 tracking-wider uppercase block truncate">ERP Business Core</span>
+                        </div>
+                    </a>
+                    <button @click="toggleSidebar()" 
+                            type="button" 
+                            class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/80 transition-colors shrink-0" 
+                            title="Slide Close Sidebar">
+                        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                    </button>
+                </div>
 
             <!-- Active User / Primary Branch Badge -->
             <div class="p-4 mx-4 my-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
@@ -213,26 +234,30 @@
                 @endif
             </nav>
 
-            <!-- Sidebar Footer -->
-            <div class="p-4 border-t border-slate-800 text-center">
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 border border-rose-900/40 transition-colors">
-                        <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-                        <span>Sign Out of StayingHotel</span>
-                    </button>
-                </form>
+                <!-- Sidebar Footer -->
+                <div class="p-4 border-t border-slate-800 text-center shrink-0">
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 border border-rose-900/40 transition-colors">
+                            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+                            <span>Sign Out of StayingHotel</span>
+                        </button>
+                    </form>
+                </div>
             </div>
         </aside>
 
-        <!-- Main Content Area -->
-        <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <!-- Main Content Area (Automatically Expands to Fill Entire Window when Sidebar is Slid In/Out) -->
+        <div class="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ease-in-out">
             
             <!-- Top Navbar -->
             <header class="h-18 bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between shadow-xs sticky top-0 z-30">
-                <div class="flex items-center gap-4">
-                    <button @click="sidebarOpen = true" class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
-                        <i data-lucide="menu" class="w-6 h-6"></i>
+                <div class="flex items-center gap-3">
+                    <button @click="toggleSidebar()" 
+                            type="button"
+                            class="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200/80 transition-all flex items-center justify-center shadow-xs group"
+                            :title="sidebarOpen ? 'Slide collapse sidebar (expand window to 100%)' : 'Slide open sidebar'">
+                        <i data-lucide="menu" class="w-5 h-5 text-slate-700 group-hover:text-emerald-600 transition-colors"></i>
                     </button>
                     <div>
                         <h1 class="text-lg font-bold text-slate-900 font-heading">@yield('page-header', 'StayingHotel ERP')</h1>
