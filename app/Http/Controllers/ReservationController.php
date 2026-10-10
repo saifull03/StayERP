@@ -74,11 +74,12 @@ class ReservationController extends Controller
         $branch = Branch::findOrFail($activeBranchId);
 
         $validated = $request->validate([
-            'guest_type' => ['required', 'in:existing,new'],
-            'guest_id' => ['required_if:guest_type,existing', 'nullable', 'exists:guests,id'],
-            'first_name' => ['required_if:guest_type,new', 'nullable', 'string', 'max:100'],
+            'guest_type' => ['nullable', 'in:existing,new'],
+            'guest_id' => ['nullable', 'exists:guests,id'],
+            'existing_guest_id' => ['nullable', 'exists:guests,id'],
+            'first_name' => ['required_without_all:guest_id,existing_guest_id', 'nullable', 'string', 'max:100'],
             'last_name' => ['nullable', 'string', 'max:100'],
-            'phone' => ['required_if:guest_type,new', 'nullable', 'string', 'max:30'],
+            'phone' => ['required_without_all:guest_id,existing_guest_id', 'nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:100'],
             'id_type' => ['nullable', 'in:nid,passport,driving_license,other'],
             'id_number' => ['nullable', 'string', 'max:100'],
@@ -103,19 +104,33 @@ class ReservationController extends Controller
                 return back()->withInput()->with('error', "Room {$room->room_number} is already booked or unavailable for selected dates.");
             }
 
-            // Resolve Guest
-            if ($validated['guest_type'] === 'new') {
-                $guest = Guest::create([
-                    'organization_id' => $branch->organization_id,
-                    'first_name' => $validated['first_name'],
-                    'last_name' => $validated['last_name'] ?? null,
-                    'phone' => $validated['phone'],
-                    'email' => $validated['email'] ?? null,
-                    'id_type' => $validated['id_type'] ?? 'nid',
-                    'id_number' => $validated['id_number'] ?? null,
-                ]);
+            // Resolve Guest (by selected ID, existing guest ID, matching phone, or create new)
+            $targetGuestId = $validated['existing_guest_id'] ?? $validated['guest_id'] ?? null;
+            if ($targetGuestId) {
+                $guest = Guest::findOrFail($targetGuestId);
+            } elseif (!empty($validated['phone'])) {
+                $existingGuest = Guest::where('organization_id', $branch->organization_id)
+                    ->where('phone', $validated['phone'])
+                    ->first();
+
+                if ($existingGuest) {
+                    $guest = $existingGuest;
+                    if (!empty($validated['email']) && empty($guest->email)) {
+                        $guest->update(['email' => $validated['email']]);
+                    }
+                } else {
+                    $guest = Guest::create([
+                        'organization_id' => $branch->organization_id,
+                        'first_name' => $validated['first_name'],
+                        'last_name' => $validated['last_name'] ?? null,
+                        'phone' => $validated['phone'],
+                        'email' => $validated['email'] ?? null,
+                        'id_type' => $validated['id_type'] ?? 'nid',
+                        'id_number' => $validated['id_number'] ?? null,
+                    ]);
+                }
             } else {
-                $guest = Guest::findOrFail($validated['guest_id']);
+                return back()->withInput()->with('error', 'Guest profile could not be identified.');
             }
 
             $checkIn = Carbon::parse($validated['check_in_date']);

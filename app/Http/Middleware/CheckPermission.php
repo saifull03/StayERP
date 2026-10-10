@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckPermission
 {
-    public function handle(Request $request, Closure $next, string $permission): Response
+    public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
         $user = $request->user();
 
@@ -22,10 +22,12 @@ class CheckPermission
 
         $activeBranchId = $request->attributes->get('active_branch_id');
 
-        if (!$user->hasPermission($permission, $activeBranchId)) {
-            abort(403, "Access Denied. You lack the '{$permission}' permission in StayingHotel ERP.");
+        foreach ($permissions as $perm) {
+            if ($user->hasPermission($perm, $activeBranchId)) {
+                return $next($request);
+            }
         }
 
-        return $next($request);
+        abort(403, "Access Denied. You lack the required permission in StayingHotel ERP.");
     }
 }

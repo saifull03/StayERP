@@ -162,4 +162,41 @@ class ReservationAndBookingTest extends TestCase
 
         $this->assertEquals($initialDue + 2500.00, $reservation->fresh()->balance_due);
     }
+
+    public function test_instant_guest_search_by_phone_and_email(): void
+    {
+        $reception = User::where('email', 'reception.dhaka@stayinghotel.com')->first();
+        $guest = Guest::first();
+
+        // 1. Search by phone digits
+        $phoneSub = substr($guest->phone, -4);
+        $responsePhone = $this->actingAs($reception)->getJson("/guests/search?q={$phoneSub}");
+        $responsePhone->assertStatus(200);
+        $responsePhone->assertJsonFragment([
+            'id' => $guest->id,
+            'phone' => $guest->phone,
+        ]);
+
+        // 2. Search by email
+        if ($guest->email) {
+            $emailSub = substr($guest->email, 0, 5);
+            $responseEmail = $this->actingAs($reception)->getJson("/guests/search?q={$emailSub}");
+            $responseEmail->assertStatus(200);
+            $responseEmail->assertJsonFragment([
+                'id' => $guest->id,
+                'email' => $guest->email,
+            ]);
+        }
+
+        // 3. Search by ID / Passport number
+        if ($guest->id_number) {
+            $idSub = substr($guest->id_number, 0, 5);
+            $responseId = $this->actingAs($reception)->getJson("/guests/search?q={$idSub}");
+            $responseId->assertStatus(200);
+            $responseId->assertJsonFragment([
+                'id' => $guest->id,
+                'id_number' => $guest->id_number,
+            ]);
+        }
+    }
 }

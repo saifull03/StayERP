@@ -88,6 +88,7 @@ Route::middleware('auth')->group(function () {
     // Guest Directory
     Route::prefix('guests')->name('guests.')->group(function () {
         Route::get('/', [GuestController::class, 'index'])->name('index')->middleware('permission:guests.view');
+        Route::get('/search', [GuestController::class, 'search'])->name('search')->middleware('permission:guests.view,reservations.create');
         Route::post('/', [GuestController::class, 'store'])->name('store')->middleware('permission:guests.manage');
         Route::get('/{guest}', [GuestController::class, 'show'])->name('show')->middleware('permission:guests.view');
     });
@@ -115,6 +116,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('expenses')->name('expenses.')->group(function () {
         Route::get('/', [ExpenseController::class, 'index'])->name('index')->middleware('permission:finance.reports');
         Route::post('/', [ExpenseController::class, 'store'])->name('store')->middleware('permission:expenses.create');
+        Route::post('/categories', [ExpenseController::class, 'storeCategory'])->name('categories.store')->middleware('permission:expenses.create');
         Route::post('/{expense}/approve', [ExpenseController::class, 'approve'])->name('approve')->middleware('permission:expenses.approve');
     });
 

@@ -18,10 +18,87 @@
 
     <form method="POST" action="{{ route('reservations.store') }}" class="space-y-6" x-data="{
         guestType: 'new',
+        guestId: '',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        email: '',
+        idType: 'nid',
+        idNumber: '',
+        searchResults: [],
+        showSuggestions: false,
+        activeField: '',
+        isLinked: false,
+        linkedGuestText: '',
+        searching: false,
+        searchTimeout: null,
         checkIn: '{{ now()->toDateString() }}',
         checkOut: '{{ now()->addDay()->toDateString() }}',
         selectedRoomRate: 0,
         nights: 1,
+
+        searchGuests(query, field) {
+            this.activeField = field;
+            if (!query || query.trim().length < 2) {
+                this.searchResults = [];
+                this.showSuggestions = false;
+                return;
+            }
+
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => {
+                this.searching = true;
+                fetch(`/guests/search?q=${encodeURIComponent(query.trim())}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        this.searchResults = data || [];
+                        this.showSuggestions = this.searchResults.length > 0;
+                        this.searching = false;
+                    })
+                    .catch(() => {
+                        this.searchResults = [];
+                        this.showSuggestions = false;
+                        this.searching = false;
+                    });
+            }, 180);
+        },
+
+        selectGuest(g) {
+            this.guestId = g.id;
+            this.firstName = g.first_name || '';
+            this.lastName = g.last_name || '';
+            this.phone = g.phone || '';
+            this.email = g.email || '';
+            this.idType = g.id_type || 'nid';
+            this.idNumber = g.id_number || '';
+            this.isLinked = true;
+            this.linkedGuestText = `${g.first_name} ${g.last_name || ''} (${g.phone})`.trim();
+            this.showSuggestions = false;
+            this.searchResults = [];
+        },
+
+        unlinkGuest() {
+            this.guestId = '';
+            this.isLinked = false;
+            this.linkedGuestText = '';
+        },
+
+        loadFromDirectory(e) {
+            const val = e.target.value;
+            if (!val) {
+                this.unlinkGuest();
+                return;
+            }
+            fetch(`/guests/search?q=${encodeURIComponent(val)}`)
+                .then(res => res.json())
+                .then(data => {
+                    const found = data.find(item => item.id == val) || data[0];
+                    if (found) {
+                        this.selectGuest(found);
+                    }
+                });
+        },
+
         updateRate(elem) {
             const opt = elem.options[elem.selectedIndex];
             this.selectedRoomRate = opt ? parseFloat(opt.getAttribute('data-price') || 0) : 0;
@@ -37,15 +114,19 @@
     }">
         @csrf
         <input type="hidden" name="branch_id" value="{{ $activeBranch->id }}">
+        <input type="hidden" name="existing_guest_id" :value="guestId">
 
         <!-- 1. Guest Information Card -->
         <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 class="text-base font-bold text-slate-900 font-heading">1. Guest Profile</h3>
+                <div>
+                    <h3 class="text-base font-bold text-slate-900 font-heading">1. Guest Profile</h3>
+                    <p class="text-[11px] text-slate-500">Search existing records instantly or enter new guest details</p>
+                </div>
                 <div class="flex items-center gap-3 text-xs">
                     <label class="flex items-center gap-1.5 cursor-pointer font-medium">
                         <input type="radio" name="guest_type" value="new" x-model="guestType" class="text-emerald-600 focus:ring-emerald-500">
-                        <span>New Guest</span>
+                        <span>New / Search Guest</span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer font-medium">
                         <input type="radio" name="guest_type" value="existing" x-model="guestType" class="text-emerald-600 focus:ring-emerald-500">
@@ -54,47 +135,233 @@
                 </div>
             </div>
 
-            <!-- Existing Guest Select -->
+            <!-- Linked Guest Banner -->
+            <div x-show="isLinked" x-cloak class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs transition-all">
+                <div class="flex items-center gap-2 text-emerald-900 font-semibold">
+                    <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold">&check;</span>
+                    <span>Existing Guest Linked: <strong class="text-emerald-700" x-text="linkedGuestText"></strong></span>
+                </div>
+                <button type="button" @click="unlinkGuest()" class="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline">
+                    Unlink (Register as New)
+                </button>
+            </div>
+
+            <!-- Existing Guest Select Directory -->
             <div x-show="guestType === 'existing'" x-cloak>
-                <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Select Registered Guest</label>
-                <select name="guest_id" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-medium focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+                <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Select Registered Guest from Directory</label>
+                <select name="guest_id" @change="loadFromDirectory($event)" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-medium focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
                     <option value="">-- Choose guest from directory --</option>
                     @foreach($guests as $g)
-                        <option value="{{ $g->id }}">{{ $g->full_name }} ({{ $g->phone }}) &bull; {{ $g->email }}</option>
+                        <option value="{{ $g->id }}" :selected="guestId == {{ $g->id }}">{{ $g->full_name }} ({{ $g->phone }}) &bull; {{ $g->email }}</option>
                     @endforeach
                 </select>
             </div>
 
-            <!-- New Guest Inputs -->
-            <div x-show="guestType === 'new'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+            <!-- Guest Input Fields (with Instant Search Popovers) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- First Name -->
+                <div class="relative" @click.away="if(activeField === 'name') showSuggestions = false">
                     <label class="block text-xs font-bold uppercase text-slate-700 mb-1">First Name *</label>
-                    <input type="text" name="first_name" placeholder="e.g. Mahmudul" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+                    <input type="text" name="first_name" x-model="firstName" 
+                           @input="searchGuests(firstName, 'name'); if(isLinked && !guestId) unlinkGuest();"
+                           placeholder="e.g. Mahmudul" 
+                           autocomplete="off"
+                           required
+                           class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
+
+                    <!-- Suggestions Dropdown for Name -->
+                    <div x-show="showSuggestions && activeField === 'name' && searchResults.length > 0" 
+                         x-cloak 
+                         class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                        <div class="p-2 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>Matching Registered Guests</span>
+                            <span class="text-[10px] lowercase text-slate-400">click to auto-fill</span>
+                        </div>
+                        <template x-for="g in searchResults" :key="g.id">
+                            <button type="button" @click="selectGuest(g)" class="w-full text-left p-2.5 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2 text-xs">
+                                <div>
+                                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span x-text="g.first_name + ' ' + (g.last_name || '')"></span>
+                                        <template x-if="g.vip_status">
+                                            <span class="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800">VIP</span>
+                                        </template>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5">
+                                        <span class="font-semibold text-emerald-700" x-text="g.phone"></span> &bull; 
+                                        <span x-text="g.email || 'No email'"></span>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded shrink-0">
+                                    Auto-fill &rarr;
+                                </span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
+
+                <!-- Last Name -->
                 <div>
                     <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Last Name</label>
-                    <input type="text" name="last_name" placeholder="e.g. Hasan" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+                    <input type="text" name="last_name" x-model="lastName" placeholder="e.g. Hasan" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
                 </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Phone Number *</label>
-                    <input type="text" name="phone" placeholder="+880 1711 000000" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+
+                <!-- Phone Number (Instant Search Hub) -->
+                <div class="relative" @click.away="if(activeField === 'phone') showSuggestions = false">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold uppercase text-slate-700">Phone Number *</label>
+                        <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Instant Search</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" name="phone" x-model="phone" 
+                               @input="searchGuests(phone, 'phone'); if(isLinked && !guestId) unlinkGuest();"
+                               @focus="if(phone && phone.length >= 2) searchGuests(phone, 'phone')"
+                               placeholder="+880 1711 000000" 
+                               autocomplete="off"
+                               required
+                               class="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
+                        
+                        <div x-show="searching && activeField === 'phone'" class="absolute right-3 top-2.5">
+                            <span class="inline-block w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions Dropdown for Phone -->
+                    <div x-show="showSuggestions && activeField === 'phone' && searchResults.length > 0" 
+                         x-cloak 
+                         class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                        <div class="p-2 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>Matching Registered Guests</span>
+                            <span class="text-[10px] lowercase text-slate-400">click to auto-fill</span>
+                        </div>
+                        <template x-for="g in searchResults" :key="g.id">
+                            <button type="button" @click="selectGuest(g)" class="w-full text-left p-2.5 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2 text-xs">
+                                <div>
+                                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span x-text="g.first_name + ' ' + (g.last_name || '')"></span>
+                                        <template x-if="g.vip_status">
+                                            <span class="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800">VIP</span>
+                                        </template>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5">
+                                        <span class="font-bold text-emerald-700" x-text="g.phone"></span> &bull; 
+                                        <span x-text="g.email || 'No email'"></span>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded shrink-0">
+                                    Auto-fill &rarr;
+                                </span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Email Address</label>
-                    <input type="email" name="email" placeholder="guest@example.com" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+
+                <!-- Email Address (Instant Search Hub) -->
+                <div class="relative" @click.away="if(activeField === 'email') showSuggestions = false">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold uppercase text-slate-700">Email Address</label>
+                        <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Instant Search</span>
+                    </div>
+                    <div class="relative">
+                        <input type="email" name="email" x-model="email" 
+                               @input="searchGuests(email, 'email'); if(isLinked && !guestId) unlinkGuest();"
+                               @focus="if(email && email.length >= 2) searchGuests(email, 'email')"
+                               placeholder="guest@example.com" 
+                               autocomplete="off"
+                               class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
+
+                        <div x-show="searching && activeField === 'email'" class="absolute right-3 top-2.5">
+                            <span class="inline-block w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions Dropdown for Email -->
+                    <div x-show="showSuggestions && activeField === 'email' && searchResults.length > 0" 
+                         x-cloak 
+                         class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                        <div class="p-2 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>Matching Registered Guests</span>
+                            <span class="text-[10px] lowercase text-slate-400">click to auto-fill</span>
+                        </div>
+                        <template x-for="g in searchResults" :key="g.id">
+                            <button type="button" @click="selectGuest(g)" class="w-full text-left p-2.5 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2 text-xs">
+                                <div>
+                                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span x-text="g.first_name + ' ' + (g.last_name || '')"></span>
+                                        <template x-if="g.vip_status">
+                                            <span class="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800">VIP</span>
+                                        </template>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5">
+                                        <span class="font-bold text-emerald-700" x-text="g.email || g.phone"></span> &bull; 
+                                        <span x-text="g.phone"></span>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded shrink-0">
+                                    Auto-fill &rarr;
+                                </span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
+
+                <!-- Identity Type -->
                 <div>
                     <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Identity Type</label>
-                    <select name="id_type" class="w-full rounded-xl border border-slate-300 p-2 text-xs font-medium focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+                    <select name="id_type" x-model="idType" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-medium focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
                         <option value="nid">National ID Card (NID)</option>
                         <option value="passport">International Passport</option>
                         <option value="driving_license">Driving License</option>
                         <option value="other">Other Official ID</option>
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">ID Number</label>
-                    <input type="text" name="id_number" placeholder="ID or Passport Number" class="w-full rounded-xl border border-slate-300 p-2.5 text-xs focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600">
+
+                <!-- ID Number (Instant Search Hub) -->
+                <div class="relative" @click.away="if(activeField === 'id_number') showSuggestions = false">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-bold uppercase text-slate-700">ID / Passport Number</label>
+                        <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Instant Search</span>
+                    </div>
+                    <div class="relative">
+                        <input type="text" name="id_number" x-model="idNumber" 
+                               @input="searchGuests(idNumber, 'id_number'); if(isLinked && !guestId) unlinkGuest();"
+                               @focus="if(idNumber && idNumber.length >= 2) searchGuests(idNumber, 'id_number')"
+                               placeholder="ID or Passport Number" 
+                               autocomplete="off"
+                               class="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-hidden">
+
+                        <div x-show="searching && activeField === 'id_number'" class="absolute right-3 top-2.5">
+                            <span class="inline-block w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions Dropdown for ID Number -->
+                    <div x-show="showSuggestions && activeField === 'id_number' && searchResults.length > 0" 
+                         x-cloak 
+                         class="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+                        <div class="p-2 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                            <span>Matching Guests by ID/Passport</span>
+                            <span class="text-[10px] lowercase text-slate-400">click to auto-fill</span>
+                        </div>
+                        <template x-for="g in searchResults" :key="g.id">
+                            <button type="button" @click="selectGuest(g)" class="w-full text-left p-2.5 hover:bg-emerald-50 transition-colors flex items-center justify-between gap-2 text-xs">
+                                <div>
+                                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span x-text="g.first_name + ' ' + (g.last_name || '')"></span>
+                                        <template x-if="g.vip_status">
+                                            <span class="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800">VIP</span>
+                                        </template>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 mt-0.5">
+                                        <span class="font-bold text-emerald-700" x-text="(g.id_type ? g.id_type.toUpperCase() + ': ' : '') + (g.id_number || 'N/A')"></span> &bull; 
+                                        <span x-text="g.phone"></span>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded shrink-0">
+                                    Auto-fill &rarr;
+                                </span>
+                            </button>
+                        </template>
+                    </div>
                 </div>
             </div>
         </div>

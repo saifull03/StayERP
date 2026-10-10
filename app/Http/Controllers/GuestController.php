@@ -35,6 +35,39 @@ class GuestController extends Controller
         return view('guests.index', compact('guests', 'search'));
     }
 
+    public function search(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $q = trim($request->input('q', ''));
+        if (strlen($q) < 2) {
+            return response()->json([]);
+        }
+
+        $activeBranch = $request->attributes->get('active_branch') ?? Branch::first();
+        $guests = Guest::where('organization_id', $activeBranch->organization_id)
+            ->where(function ($query) use ($q) {
+                $query->where('phone', 'like', "%{$q}%")
+                      ->orWhere('email', 'like', "%{$q}%")
+                      ->orWhere('first_name', 'like', "%{$q}%")
+                      ->orWhere('last_name', 'like', "%{$q}%")
+                      ->orWhere('id_number', 'like', "%{$q}%");
+            })
+            ->limit(10)
+            ->get([
+                'id',
+                'first_name',
+                'last_name',
+                'phone',
+                'email',
+                'id_type',
+                'id_number',
+                'address',
+                'city',
+                'vip_status',
+            ]);
+
+        return response()->json($guests);
+    }
+
     public function show(Guest $guest): View
     {
         $guest->load(['reservations.branch', 'reservations.reservationRooms.room.roomType']);
