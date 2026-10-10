@@ -33,9 +33,9 @@
         </form>
 
         @if(auth()->user()->hasPermission('reservations.create'))
-        <a href="{{ route('reservations.create') }}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 shrink-0">
-            <i data-lucide="plus" class="w-4 h-4"></i>
-            <span>Create New Reservation</span>
+        <a href="{{ route('reservations.create') }}" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 shrink-0">
+            <i data-lucide="zap" class="w-4 h-4 text-emerald-200"></i>
+            <span>Walk-In POS / New Reservation</span>
         </a>
         @endif
     </div>
